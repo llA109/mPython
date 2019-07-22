@@ -19,7 +19,6 @@ from framebuf import FrameBuffer
 
 i2c = I2C(scl=Pin(Pin.P19), sda=Pin(Pin.P20), freq=400000)
 
-
 class Font(object):
     def __init__(self, font_address=0x400000):
         self.font_address = font_address
@@ -52,13 +51,11 @@ class Font(object):
         esp.flash_read(ptr_char_data + self.font_address, buffer)
         return buffer
 
-
 class TextMode():
     normal = 1
     rev = 2
     trans = 3
     xor = 4
-
 
 class OLED(SSD1106_I2C):
     """ 128x64 oled display """
@@ -121,54 +118,265 @@ class OLED(SSD1106_I2C):
                     i = i + 1
             x = x + width + 1
 
+class Mpu6050_acce_fs():
+    ACCE_FS_2G  = 0x00     #Accelerometer full scale range is +/- 2g 
+    ACCE_FS_4G  = 0x01     #Accelerometer full scale range is +/- 4g 
+    ACCE_FS_8G  = 0x02     #Accelerometer full scale range is +/- 8g 
+    ACCE_FS_16G = 0x03     # Accelerometer full scale range is +/- 16g 
+class Mpu6050_gyro_fs():
+    GYRO_FS_250DPS  = 0     # Gyroscope full scale range is +/- 250 degree per sencond 
+    GYRO_FS_500DPS  = 1     # Gyroscope full scale range is +/- 500 degree per sencond 
+    GYRO_FS_1000DPS = 2     # Gyroscope full scale range is +/- 1000 degree per sencond 
+    GYRO_FS_2000DPS = 3     # Gyroscope full scale range is +/- 2000 degree per sencond 
+class Bit():
+    BIT0 = 0x1
+    BIT1 = 0x2
+    BIT2 = 0x4
+    BIT3 = 0x8
+    BIT4 = 0x10
+    BIT5 = 0x20
+    BIT6 = 0x40
+    BIT7 = 0x80
+
+class Mpu6050():
+    """  """
+
+    def __init__(self, acce_fs = Mpu6050_acce_fs.ACCE_FS_2G, gyro_fs  = Mpu6050_gyro_fs.GYRO_FS_500DPS):
+        self.addr = 104
+        self.acce_fs = acce_fs
+        self.gyro_fs = gyro_fs
+        self.acce_sensitivity = 16384  >> self.acce_fs
+        self.gyro_sensitivity = (1310 >> self.gyro_fs)/10
+        # print("acce_sensitivity: %d" % self.acce_sensitivity)
+        # print("gyro_sensitivity: %.2f" % self.gyro_sensitivity)
+        self.wake_up()
+        self.set_acce_fs(self.acce_fs)
+        self.set_gyro_fs(self.gyro_fs)
+        self.set_aux_i2c_mode(0)
+
+    def wake_up(self):
+        i2c.writeto(self.addr, b'\x6B')  
+        pwr_mgmt = i2c.readfrom(self.addr, 1)
+        _pwr_mgmt = pwr_mgmt[0] & (~Bit.BIT6) #0xBF
+        i2c.writeto(self.addr, bytearray([0x6B, _pwr_mgmt]))
+        i2c.writeto(self.addr, b'\x6B')  
+        pwr_mgmt = i2c.readfrom(self.addr, 1)
+
+    def set_aux_i2c_mode(self, mode):
+        i2c.writeto(self.addr, b'\x6A')  
+        use_ctrl = i2c.readfrom(self.addr, 1)
+        _use_ctrl =  use_ctrl[0]
+        i2c.writeto(self.addr, b'\x37') 
+        bypass = i2c.readfrom(self.addr, 1)
+        _bypass =  bypass[0]
+        if(mode == 1):
+            _bypass &= 0xfd
+            _use_ctrl |=  0x20
+        elif (mode == 0):
+            _bypass |= 0x02
+            _use_ctrl &= 0xdf 
+        i2c.writeto(self.addr, bytearray([0x6A, _use_ctrl]))
+        i2c.writeto(self.addr, bytearray([0x37, _bypass]))
+
+    def get_device_id(self):
+        i2c.writeto(self.addr, b'\x75') 
+        id = i2c.readfrom(self.addr, 1)
+        return id[0]
+
+    def set_acce_fs(self, acce_fs):
+        i2c.writeto(self.addr, b'\x1C')  
+        afs = i2c.readfrom(self.addr, 1)
+        _afs = afs[0] & 0xE7
+        _afs |= acce_fs << 3
+        i2c.writeto(self.addr, bytearray([0x1C, _afs]))
+        # i2c.writeto(self.addr, b'\x1C')  
+        # afs = i2c.readfrom(self.addr, 1)
+        # print("afs: %d" % afs[0])
+
+    def set_gyro_fs(self, gyro_fs):
+        i2c.writeto(self.addr, b'\x1B')  
+        gfs = i2c.readfrom(self.addr, 1)
+        _gfs = gfs[0] & 0xE7
+        _gfs |= gyro_fs << 3
+        i2c.writeto(self.addr, bytearray([0x1B, _gfs]))
+        # i2c.writeto(self.addr, b'\x1B')  
+        # gfs = i2c.readfrom(self.addr, 1)
+        # print("gfs: %d" %  gfs[0])
+
+    def get_raw_acce(self):
+        i2c.writeto(self.addr, b'\x3B') 
+        acce = i2c.readfrom(self.addr, 6)
+        _acce = ustruct.unpack('!3h', acce)
+        return _acce
+
+    def get_raw_gyro(self):
+        i2c.writeto(self.addr, b'\x43') 
+        gyro = i2c.readfrom(self.addr, 6)
+        _gyro = ustruct.unpack('!3h', gyro)
+        return _gyro 
+
+    def get_temp(self):
+        i2c.writeto(self.addr, b'\x41') 
+        temp = i2c.readfrom(self.addr, 2)
+        _temp = ustruct.unpack('!h', temp)[0]
+        return _temp /340 + 36.53 
+
 class Accelerometer():
     """  """
 
     def __init__(self):
-        self.addr = 38
-        self.i2c = i2c
-        self.i2c.writeto(self.addr, b'\x0F\x08')  # set resolution = 10bit
-        self.i2c.writeto(self.addr, b'\x11\x00')  # set power mode = normal
+        self.mpu = mpu6050
 
     def get_x(self):
-        retry = 0
-        if (retry < 5):
-            try:
-                self.i2c.writeto(self.addr, b'\x02', False)
-                buf = self.i2c.readfrom(self.addr, 2)
-                x = ustruct.unpack('h', buf)[0]
-                return x / 4 / 4096
-            except:
-                retry = retry + 1
-        else:
-            raise Exception("i2c read/write error!")
+        acce_x = self.mpu.get_raw_acce()[0]
+        return acce_x/self.mpu.acce_sensitivity
 
     def get_y(self):
-        retry = 0
-        if (retry < 5):
-            try:
-                self.i2c.writeto(self.addr, b'\x04', False)
-                buf = self.i2c.readfrom(self.addr, 2)
-                y = ustruct.unpack('h', buf)[0]
-                return y / 4 / 4096
-            except:
-                retry = retry + 1
-        else:
-            raise Exception("i2c read/write error!")
+        acce_y = self.mpu.get_raw_acce()[1]
+        return acce_y/self.mpu.acce_sensitivity
 
     def get_z(self):
-        retry = 0
-        if (retry < 5):
-            try:
-                self.i2c.writeto(self.addr, b'\x06', False)
-                buf = self.i2c.readfrom(self.addr, 2)
-                z = ustruct.unpack('h', buf)[0]
-                return z / 4 / 4096
-            except:
-                retry = retry + 1
-        else:
-            raise Exception("i2c read/write error!")
+        acce_z = self.mpu.get_raw_acce()[2]
+        return acce_z/self.mpu.acce_sensitivity
 
+class Gyro():
+    """  """
+
+    def __init__(self):
+        self.mpu = mpu6050
+
+    def get_x(self):
+        gyro_x = self.mpu.get_raw_gyro()[0]
+        return gyro_x/self.mpu.gyro_sensitivity
+
+    def get_y(self):
+        gyro_y = self.mpu.get_raw_gyro()[1]
+        return gyro_y/self.mpu.gyro_sensitivity
+
+    def get_z(self):
+        gyro_z = self.mpu.get_raw_gyro()[2]
+        return gyro_z/self.mpu.gyro_sensitivity
+
+class Hmc5583l_samples():
+    HMC5883L_SAMPLES_8  = 0b11
+    HMC5883L_SAMPLES_4  = 0b10
+    HMC5883L_SAMPLES_2  = 0b01
+    HMC5883L_SAMPLES_1  = 0b00
+class Hmc5583l_data_rate():
+    HMC5883L_DATARATE_75HZ     = 0b110
+    HMC5883L_DATARATE_30HZ     = 0b101
+    HMC5883L_DATARATE_15HZ     = 0b100
+    HMC5883L_DATARATE_7_5HZ    = 0b011
+    HMC5883L_DATARATE_3HZ      = 0b010
+    HMC5883L_DATARATE_1_5HZ    = 0b001
+    HMC5883L_DATARATE_0_75_HZ  = 0b000
+class Hmc5583l_range():
+    HMC5883L_RANGE_8_1GA     = 0b111
+    HMC5883L_RANGE_5_6GA     = 0b110
+    HMC5883L_RANGE_4_7GA     = 0b101
+    HMC5883L_RANGE_4GA       = 0b100
+    HMC5883L_RANGE_2_5GA     = 0b011
+    HMC5883L_RANGE_1_9GA     = 0b010
+    HMC5883L_RANGE_1_3GA     = 0b001
+    HMC5883L_RANGE_0_88GA    = 0b000
+class Hmc5583l_mode():
+    HMC5883L_IDLE          = 0b10
+    HMC5883L_SINGLE        = 0b01
+    HMC5883L_CONTINOUS     = 0b00
+class Hmc5583l():
+    """  """
+
+    def __init__(self, range = Hmc5583l_range.HMC5883L_RANGE_1_3GA, mode = Hmc5583l_mode.HMC5883L_CONTINOUS, \
+                    data_rate = Hmc5583l_data_rate.HMC5883L_DATARATE_30HZ, samples = Hmc5583l_samples.HMC5883L_SAMPLES_8):
+        self.addr = 30
+        self.range = range
+        self.mode = mode
+        self.data_rate = data_rate
+        self.samples = samples
+        self.mgPerDigit = 0.92
+        self.x_off = 0
+        self.y_off = 0
+        self.set_range(self.range)
+        self.set_mode(self.mode)
+        self.set_data_rate(self.data_rate)
+        self.set_samples(self.samples)
+        # test
+        # i2c.writeto(self.addr, b'\x00')  # HMC5883L_REG_CONFIG_A
+        # reg = i2c.readfrom(self.addr, 3)
+        # print("CFG_A reg: %d, CFG_B reg: %d, MODE reg: %d, mgPerDigit: %.2f," % (reg[0], reg[1], reg[2], self.mgPerDigit))
+
+    def set_offset(self, x_off, y_off):
+        self.x_off = x_off
+        self.y_off = y_off
+
+    def set_range(self, range):
+        if range == 0: 
+	        self.mgPerDigit = 0.073
+        elif range == 1:
+            self.mgPerDigit = 0.92
+        elif range == 2:
+            self.mgPerDigit = 1.22
+        elif range == 3:
+            self.mgPerDigit = 1.52
+        elif range == 4:
+            self.mgPerDigit = 2.27
+        elif range == 5:
+            self.mgPerDigit = 2.56
+        elif range == 6:
+            self.mgPerDigit = 3.03
+        elif range == 7:
+            self.mgPerDigit = 4.35
+        i2c.writeto(self.addr, bytearray([0x01, (range << 5)]))
+
+    def set_mode(self, mode):
+        i2c.writeto(self.addr, b'\x02')  # HMC5883L_REG_CONFIG_A
+        reg = i2c.readfrom(self.addr, 1)
+        _reg = reg[0] & 0xfc
+        _reg |= mode
+        i2c.writeto(self.addr, bytearray([0x02, _reg]))  
+
+    def set_data_rate(self, data_rate):
+        i2c.writeto(self.addr, b'\x00')  # HMC5883L_REG_CONFIG_A
+        reg = i2c.readfrom(self.addr, 1)
+        _reg = reg[0] & 0xe3
+        _reg |= ((data_rate << 2))
+        i2c.writeto(self.addr, bytearray([0x00, _reg]))   
+
+    def set_samples(self, samples):
+        i2c.writeto(self.addr, b'\x00')  # HMC5883L_REG_CONFIG_A
+        reg = i2c.readfrom(self.addr, 1)
+        _reg = reg[0] & 0x9f
+        _reg |= ((samples << 5))
+        i2c.writeto(self.addr, bytearray([0x00, _reg]))     
+
+    def get_raw(self):
+        i2c.writeto(self.addr, b'\x03') 
+        raw = i2c.readfrom(self.addr, 6)
+        _raw = ustruct.unpack('!3h', raw)
+        return _raw
+
+    def get_x(self):
+        x = (self.get_raw()[0] - self.x_off) * self.mgPerDigit
+        return x
+
+    def get_y(self):
+        y = (self.get_raw()[1]  - self.y_off) * self.mgPerDigit
+        return y
+
+    def get_z(self):
+        z = self.get_raw()[2] * self.mgPerDigit
+        return z
+
+    def get_angle(self, longitude):
+        heading = math.atan2(self.get_y(), self.get_x())
+        declinationAngle = longitude / (180 / math.pi)
+        heading += declinationAngle
+        if (heading < 0):
+            heading += 2 * math.pi
+        if (heading > 2 * math.pi):
+            heading -= 2 * math.pi
+        headingDegrees = heading * 180/math.pi
+        return headingDegrees
 
 class BME280(object):
     def __init__(self):
@@ -269,6 +477,128 @@ class BME280(object):
         else:
             raise Exception("i2c read/write error!")
 
+class BS8112A():
+    """  """
+
+    def __init__(self):
+        self.addr = 80
+        # config
+        self.config = [0xB0, 0x00, 0x00, 0x83, 0xf3, 0x98, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x00] 
+        checksum = 0
+        for i in range(1, 19):
+            checksum += self.config[i]
+        checksum &= 0xff
+        self.config[18] = checksum
+        # print(self.config[18])
+        i2c.writeto(self.addr, bytearray(self.config), True) 
+        # i2c.writeto(self.addr, b'\xB0', False) 
+        # time.sleep_ms(10)
+        # print(i2c.readfrom(self.addr, 17, True))
+
+    # key map:
+    # value       bit7 bit6 bit5 bit4 bit3 bit2 bit1 bit0 
+    # bs8112a key Key8 Key7 Key6 Key5 Key4 Key3 Key2 Key1
+    # mpython key       N    O    H    T    Y    P
+    def key_value(self):
+        i2c.writeto(self.addr, b'\x08', False)  
+        time.sleep_ms(10)
+        value = i2c.readfrom(self.addr, 1, True)[0]
+        time.sleep_ms(10)
+        return value
+
+class Codec_mode():
+    ES_MODULE_ADC_DAC  = 0x00      
+    ES_MODULE_DAC  = 0x01    
+    ES_MODULE_ADC  = 0x02     
+
+class Es8388():
+    """  """
+
+    def __init__(self, adc_volume = 0, dac_volume  = 0, volume = 65):
+        self.addr = 16
+        self.adc_volume = adc_volume
+        self.dac_volume = dac_volume
+        self.volume = volume
+        self.set_voice_mute(1)
+        # i2c.writeto(self.addr, bytearray([0x19, 0x04])) # ES8388_DACCONTROL3 0x04 mute/0x00 unmute&ramp;DAC unmute and  disabled digital volume control soft ramp
+        #  Chip Control and Power Management 
+        i2c.writeto(self.addr, bytearray([0x01, 0x50])) # ES8388_CONTROL2 0x40? 
+        i2c.writeto(self.addr, bytearray([0x02, 0x00])) # ES8388_CHIPPOWER normal all and power up all
+        i2c.writeto(self.addr, bytearray([0x08, 0x00])) # ES8388_MASTERMODE CODEC IN I2S SLAVE MODE 0x00: slave
+        # dac setup
+        i2c.writeto(self.addr, bytearray([0x04, 0xC0])) # ES8388_DACPOWER . disable DAC and disable Lout/Rout/1/2
+        i2c.writeto(self.addr, bytearray([0x00, 0x12])) # ES8388_CONTROL1. Enfr=0,Play&Record Mode,(0x17-both of mic&paly)
+        i2c.writeto(self.addr, bytearray([0x17, 0x18])) # ES8388_DACCONTROL1 1a 0x18:16bit iis , 0x00:24
+        i2c.writeto(self.addr, bytearray([0x18, 0x02])) # ES8388_DACCONTROL2 DACFsMode,SINGLE SPEED; DACFsRatio,256
+        i2c.writeto(self.addr, bytearray([0x26, 0x00])) # ES8388_DACCONTROL16 0x00 audio on LIN1&RIN1,  0x09 LIN2&RIN2
+        i2c.writeto(self.addr, bytearray([0x27, 0x90])) # ES8388_DACCONTROL17 only left DAC to left mixer enable 0db
+        i2c.writeto(self.addr, bytearray([0x2a, 0x90])) # ES8388_DACCONTROL20 only right DAC to right mixer enable 0db
+        i2c.writeto(self.addr, bytearray([0x2b, 0x80])) # ES8388_DACCONTROL21 set internal ADC and DAC use the same LRCK clock, ADC LRCK as internal LRCK
+        i2c.writeto(self.addr, bytearray([0x2d, 0x00])) # ES8388_DACCONTROL23 vroi=0
+        self.set_adc_dac_volume(Codec_mode.ES_MODULE_DAC, self.dac_volume, 0) #0db
+        i2c.writeto(self.addr, bytearray([0x04, 0x3c])) # ES8388_DACPOWER 0x3c Enable DAC and Enable Lout/Rout/1/2
+        # adc setup
+        i2c.writeto(self.addr, bytearray([0x03, 0xff])) # ES8388_ADCPOWER
+        i2c.writeto(self.addr, bytearray([0x09, 0xbb])) # ES8388_ADCCONTROL1 MIC Left and Right channel PGA gain
+        i2c.writeto(self.addr, bytearray([0x0a, 0x00])) # ES8388_ADCCONTROL2 0x00 LINSEL & RINSEL, LIN1/RIN1 as ADC Input; DSSEL,use one DS Reg11; DSR, LINPUT1-RINPUT1
+        i2c.writeto(self.addr, bytearray([0x0b, 0x02])) # ES8388_ADCCONTROL3 clock input
+        i2c.writeto(self.addr, bytearray([0x0c, 0x0c])) # ES8388_ADCCONTROL4 Left/Right data, Left/Right justified mode, Bits length 16bit, I2S format 0x0c?
+        i2c.writeto(self.addr, bytearray([0x0d, 0x02])) # ES8388_ADCCONTROL5 ADCFsMode,singel SPEED,RATIO=256
+        # ALC for Microphone
+        self.set_adc_dac_volume(Codec_mode.ES_MODULE_ADC, self.adc_volume, 0) #0db
+        i2c.writeto(self.addr, bytearray([0x03, 0x09])) # ES8388_ADCPOWER Power on ADC, Enable LIN&RIN, Power off MICBIAS, set int1lp to low power mode
+        # set volume
+        self.set_volume(self.volume)
+        self.set_voice_mute(0)
+        # test 
+        # for i in range(0, 52):
+        #     i2c.writeto(self.addr, bytearray([i]))
+        #     print("%d: %d" % (i, i2c.readfrom(self.addr, 1)[0]))
+
+    def deinit(self):
+        i2c.writeto(self.addr, bytearray([0x02, 0xff])) # ES8388_CHIPPOWER reset and stop es838
+
+    def set_adc_dac_volume(self, mode, volume, dot):
+        _volume = volume
+        if (_volume < -96):
+            _volume = -96
+        else :
+            _volume = 0
+        _dot = 0
+        if dot >= 5:
+            _dot = 1
+
+        _volume = (-_volume << 1) + _dot
+        if (mode == Codec_mode.ES_MODULE_ADC or mode == Codec_mode.ES_MODULE_ADC_DAC) :
+            i2c.writeto(self.addr, bytearray([0x10, _volume])) # ES8388_ADCCONTROL8
+            i2c.writeto(self.addr, bytearray([0x11, _volume])) # ES8388_ADCCONTROL9
+        if (mode == Codec_mode.ES_MODULE_DAC or mode == Codec_mode.ES_MODULE_ADC_DAC) :
+            i2c.writeto(self.addr, bytearray([0x1b, _volume])) # ES8388_DACCONTROL5
+            i2c.writeto(self.addr, bytearray([0x1a, _volume])) # ES8388_DACCONTROL4
+
+    def set_volume(self, volume):
+        self.volume = volume
+        if (self.volume < 0):
+            self.volume = 0
+        elif (self.volume > 100):
+            self.volume = 100
+        i2c.writeto(self.addr, bytearray([0x2e, self.volume//3])) # ES8388_DACCONTROL24
+        i2c.writeto(self.addr, bytearray([0x2f, self.volume//3])) # ES8388_DACCONTROL25
+        i2c.writeto(self.addr, bytearray([0x30, 0])) # ES8388_DACCONTROL26
+        i2c.writeto(self.addr, bytearray([0x31, 0])) # ES8388_DACCONTROL27
+        # print("volume L: %d" % (self.volume//3))
+
+    def get_volume(self):
+        return self.volume
+
+    def set_voice_mute(self, mute):
+        i2c.writeto(self.addr, b'\x19')  
+        dac_ctr3 = i2c.readfrom(self.addr, 1)[0]
+        if(mute):
+            dac_ctr3 |= 0x04
+        else:
+            dac_ctr3 &= 0xFB
+        i2c.writeto(self.addr, bytearray([0x19, dac_ctr3]))
 
 class PinMode(object):
     IN = 1
@@ -277,10 +607,8 @@ class PinMode(object):
     ANALOG = 4
     OUT_DRAIN = 5
 
-
 pins_remap_esp32 = (33, 32, 35, 34, 39, 0, 16, 17, 26, 25, 36, 2, -1, 18, 19, 21, 5, -1, -1, 22, 23, -1, -1, 27, 14, 12,
                     13, 15, 4)
-
 
 class MPythonPin():
     def __init__(self, pin, mode=PinMode.IN, pull=None):
@@ -352,24 +680,6 @@ class MPythonPin():
         self.pwm.freq(freq)
         self.pwm.duty(duty)
 
-
-'''
-# to be test
-class LightSensor(ADC):
-    
-    def __init__(self):
-        super().__init__(Pin(pins_remap_esp32[4]))
-        # super().atten(ADC.ATTN_11DB)
-    
-    def value(self):
-        # lux * k * Rc = N * 3.9/ 4096
-        # k = 0.0011mA/Lux
-        # lux = N * 3.9/ 4096 / Rc / k
-        return super().read() * 1.1 / 4095 / 6.81 / 0.011
-    
-'''
-
-
 class wifi:
     def __init__(self):
         self.sta = network.WLAN(network.STA_IF)
@@ -418,21 +728,23 @@ class wifi:
         self.ap.active(False)
         print('disable AP WiFi...')
 
-
 # display
 if 60 in i2c.scan():
     oled = OLED()
     display = oled
 
-# 3 axis accelerometer
+# 9 axis
+mpu6050 = Mpu6050()
 accelerometer = Accelerometer()
+gyro = Gyro()
+compass = Hmc5583l()
 
 # bm280
 if 119 in i2c.scan():
     bme280 = BME280()
 
 # 3 rgb leds
-rgb = NeoPixel(Pin(17, Pin.OUT), 3, 3, 1)
+rgb = NeoPixel(Pin(25, Pin.OUT), 25, 3, 1)
 rgb.write()
 
 # light sensor
@@ -443,20 +755,24 @@ light.atten(light.ATTN_11DB)
 sound = ADC(Pin(36))
 sound.atten(sound.ATTN_11DB)
 
+# slide resistance
+slider_res =  ADC(Pin(34))
+slider_res.atten(slider_res.ATTN_11DB)
+
 # buttons
 button_a = Pin(0, Pin.IN, Pin.PULL_UP)
 button_b = Pin(2, Pin.IN, Pin.PULL_UP)
 
 # touchpad
-touchPad_P = TouchPad(Pin(27))
-touchPad_Y = TouchPad(Pin(14))
-touchPad_T = TouchPad(Pin(12))
-touchPad_H = TouchPad(Pin(13))
-touchPad_O = TouchPad(Pin(15))
-touchPad_N = TouchPad(Pin(4))
+touch_pad = BS8112A()
+
+# human infrared
+pir = Pin(21, mode = Pin.IN, pull = None)
+
+# codec es8388
+es8388 = Es8388()
 
 from gui import *
-
 
 def numberMap(inputNum, bMin, bMax, cMin, cMax):
     outputNum = 0

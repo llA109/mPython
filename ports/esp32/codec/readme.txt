@@ -422,3 +422,28 @@ github分支提交
 	|--audio_recorder.c
 2019.06.22
 test
+
+2019.07.19
+修改mpython固件，适应mpython-box
+1 修改renderer.h
+  增加模式ADC DAC ADC_DAC
+  typedef enum {
+    ADC_BUILT_IN, DAC_BUILT_IN, ADC_DAC_BUILT_IN,  ADC, DAC, ADC_DAC,
+} _i2s_mode_t;
+
+2 修改renderer.c
+  a i2s_comm_format_t 改为I2S_COMM_FORMAT_I2S
+  b 增加对DAC ADC ADC_DAC模式处理
+  c 增加I2S引脚设置
+
+3 修改modcodec.c
+  函数record_to_file() iat_record()中，注释掉
+   // renderer_adc_enable(renderer->i2s_num);
+   // renderer_adc_disable(renderer->i2s_num);
+   // i2s_adc_data_scale((uint8_t *)read_buff, (uint8_t *)read_buff, renderer->i2s_read_buff_size);
+  
+  player_init() 中
+  renderer_config->mode = DAC_BUILT_IN; 改为 renderer_config->mode = DAC; 
+
+  audio_recorder_init(void) 中
+  renderer_config->mode = ADC_BUILT_IN 改为renderer_config->mode = ADC

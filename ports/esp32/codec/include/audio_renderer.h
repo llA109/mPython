@@ -14,7 +14,7 @@
 //#include "common_component.h"
 
 typedef enum {
-    ADC_BUILT_IN, DAC_BUILT_IN, ADC_DAC_BUILT_IN,
+    ADC_BUILT_IN, DAC_BUILT_IN, ADC_DAC_BUILT_IN,  ADC, DAC, ADC_DAC,
 } _i2s_mode_t;
 
 #define RENDERER_DEFAULT(){                     \

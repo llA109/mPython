@@ -27,19 +27,25 @@ extern HTTP_HEAD_VAL http_head[6];
 static void init_i2s(renderer_config_t *config)
 {
     i2s_mode_t mode = I2S_MODE_MASTER;
-    i2s_comm_format_t comm_fmt = I2S_COMM_FORMAT_I2S_MSB; //I2S_COMM_FORMAT_I2S
+    i2s_comm_format_t comm_fmt = I2S_COMM_FORMAT_I2S; //I2S_COMM_FORMAT_I2S_MSB;
 
-    if (config->mode == DAC_BUILT_IN)
+    if ((config->mode == DAC_BUILT_IN) || (config->mode == ADC_DAC_BUILT_IN))
     {
         mode = mode | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN;
     }
-    else if (config->mode == ADC_BUILT_IN)
+    else if ((config->mode == ADC_BUILT_IN) || (config->mode == ADC_DAC_BUILT_IN))
     {
         mode = mode | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN;
     }
-    else if (config->mode == ADC_DAC_BUILT_IN)
+    else if ((config->mode == DAC) || (config->mode == ADC_DAC))
     {
-        mode = mode | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN;
+        //ESP_LOGE(TAG, "I2S master TX mode.");
+        mode = mode | I2S_MODE_TX; 
+    }
+    else if ((config->mode == ADC) || (config->mode == ADC_DAC))
+    {
+        //ESP_LOGE(TAG, "I2S master RX mode.");
+        mode = mode | I2S_MODE_RX;
     }
 
     /*
@@ -67,6 +73,19 @@ static void init_i2s(renderer_config_t *config)
     i2s_driver_install(config->i2s_num, &i2s_config, 1, &i2s_event_queue);
     i2s_set_clk(config->i2s_num, config->sample_rate, config->bit_depth, config->i2s_channal_nums);
     //i2s_set_pin(config->i2s_num, NULL);
+    if((config->mode == ADC) || (config->mode == DAC) ||(config->mode == ADC_DAC))
+    {
+        i2s_pin_config_t i2s_pin_cfg;
+        i2s_pin_cfg.bck_io_num = GPIO_NUM_18; //5;
+        i2s_pin_cfg.ws_io_num = GPIO_NUM_5; //25;
+        i2s_pin_cfg.data_out_num = GPIO_NUM_32; //26;
+        i2s_pin_cfg.data_in_num = GPIO_NUM_35; //35;
+        i2s_set_pin(config->i2s_num, &i2s_pin_cfg);
+        // i2s_mclk_gpio_select(config->i2s_num, GPIO_NUM_0);
+        PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO0_U, FUNC_GPIO0_CLK_OUT1);
+        WRITE_PERI_REG(PIN_CTRL, 0xFFF0);
+    }
+    
     if ((config->mode == DAC_BUILT_IN) || (config->mode == ADC_DAC_BUILT_IN))
     {
         i2s_set_dac_mode(I2S_DAC_CHANNEL_BOTH_EN);

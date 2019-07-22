@@ -79,15 +79,15 @@ STATIC void record_to_file(void)
     int i = 0;
     uint16_t record_times = 32 * recorder->recorde_time / renderer->i2s_read_buff_size; //caculate record loops
     // ESP_LOGE(TAG, "i2s_read times: %d", record_times); 
-    renderer_adc_enable(renderer->i2s_num);    
+    // renderer_adc_enable(renderer->i2s_num);    
     while(i < record_times)
     {
         renderer_read_raw(read_buff, renderer->i2s_read_buff_size);
-        i2s_adc_data_scale(write_buff, read_buff, renderer->i2s_read_buff_size);
-        file_write(F, &write_bytes, write_buff, renderer->i2s_read_buff_size);
+        // i2s_adc_data_scale(write_buff, read_buff, renderer->i2s_read_buff_size);
+        file_write(F, &write_bytes, read_buff, renderer->i2s_read_buff_size);
         i++;
     }
-    renderer_adc_disable(renderer->i2s_num);
+    // renderer_adc_disable(renderer->i2s_num);
     free(read_buff);
     free(write_buff);
     file_close(F);
@@ -113,11 +113,11 @@ STATIC void iat_record(const char *file_name)
     size_t n = 0;  
     int i = 0;
     uint16_t record_times = 32 * recorder->recorde_time / renderer->i2s_read_buff_size; //caculate record loops
-    renderer_adc_enable(renderer->i2s_num); 
+    // renderer_adc_enable(renderer->i2s_num); 
     while(i < record_times)
     {
         renderer_read_raw((uint8_t *)read_buff, renderer->i2s_read_buff_size);
-        i2s_adc_data_scale((uint8_t *)read_buff, (uint8_t *)read_buff, renderer->i2s_read_buff_size);
+        // i2s_adc_data_scale((uint8_t *)read_buff, (uint8_t *)read_buff, renderer->i2s_read_buff_size);
         mbedtls_base64_encode(NULL, 0, &n, (const unsigned char *)read_buff, renderer->i2s_read_buff_size);
         memset(write_buff, 0, renderer->i2s_read_buff_size + 2000);
         mbedtls_base64_encode((unsigned char *)write_buff, n, (size_t *)&out, (const unsigned char *)read_buff, renderer->i2s_read_buff_size); 
@@ -147,7 +147,7 @@ STATIC void iat_record(const char *file_name)
     //     break;
     // }   
 
-    renderer_adc_disable(renderer->i2s_num);
+    // renderer_adc_disable(renderer->i2s_num);
     free(read_buff);
     free(write_buff);
     free(des);
@@ -211,9 +211,9 @@ STATIC mp_obj_t audio_player_init(void)
         renderer_config->i2s_num = I2S_NUM_0;
         renderer_config->sample_rate = 44100;
         renderer_config->sample_rate_modifier = 1.0;
-        renderer_config->mode = DAC_BUILT_IN; 
+        renderer_config->mode = DAC; 
         renderer_config->i2s_channal_nums = 2; 
-        renderer_config->use_apll = false;                                               
+        renderer_config->use_apll = true;                                               
         renderer_init(renderer_config); //I2S参数配置
         // ESP_LOGE(TAG, "2. Create renderer, RAM left: %d", esp_get_free_heap_size());
         /* 3. Create http raram handle.*/
@@ -469,7 +469,7 @@ STATIC mp_obj_t audio_recorder_init(void)
         renderer_config->adc_channel_num = ADC1_CHANNEL_2;
         renderer_config->sample_rate = 16000;
         renderer_config->sample_rate_modifier = 1.0;
-        renderer_config->mode = ADC_BUILT_IN; 
+        renderer_config->mode = ADC; 
         renderer_config->i2s_channal_nums = 1;    
         renderer_config->i2s_read_buff_size = 3*1024;
         renderer_config->use_apll = true;                                          
