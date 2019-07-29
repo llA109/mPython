@@ -294,7 +294,7 @@ MP_DEFINE_CONST_FUN_OBJ_0(mpython_music_get_tempo_obj, mpython_music_get_tempo);
 STATIC mp_obj_t mpython_music_stop(mp_uint_t n_args, const mp_obj_t *args) {
     int pin;
     if (n_args == 0) {
-        pin = 16;
+        pin = 4;
     } else {
         pin = mp_obj_get_int(args[0]);
     }
@@ -313,7 +313,7 @@ STATIC mp_obj_t mpython_music_play(mp_uint_t n_args, const mp_obj_t *pos_args, m
     
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_music, MP_ARG_REQUIRED | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL} },
-        { MP_QSTR_pin,   MP_ARG_INT, {.u_int = 16} },
+        { MP_QSTR_pin,   MP_ARG_INT, {.u_int = 4} },
         { MP_QSTR_wait,  MP_ARG_BOOL, {.u_bool = true} },
         { MP_QSTR_loop,  MP_ARG_BOOL, {.u_bool = false} },
     };
@@ -379,7 +379,7 @@ STATIC mp_obj_t mpython_music_pitch(mp_uint_t n_args, const mp_obj_t *pos_args, 
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_frequency, MP_ARG_REQUIRED | MP_ARG_INT, {.u_int = 0} },
         { MP_QSTR_duration, MP_ARG_INT, {.u_int = -1} },
-        { MP_QSTR_pin,    MP_ARG_INT, {.u_int = 16} },
+        { MP_QSTR_pin,    MP_ARG_INT, {.u_int = 4} },
         { MP_QSTR_wait,   MP_ARG_BOOL, {.u_bool = true} },
     };
 
